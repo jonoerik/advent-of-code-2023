@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
-import argparse
 from pathlib import Path
 import re
-import sys
 
 InputType = list[str]
 ResultType = int
@@ -36,20 +34,3 @@ def part2(input_data: InputType) -> ResultType:
             conversion_map[last_regex.search(line[::-1]).group(0)[::-1]]
 
     return sum([get_calibration_value(line) for line in input_data])
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-1", "--part1", action="store_true")
-    parser.add_argument("-2", "--part2", action="store_true")
-    parser.add_argument("input")
-    args = parser.parse_args()
-
-    if args.part1 == args.part2:
-        sys.exit("Exactly one of --part1 or --part2 must be specified.")
-
-    data = load(Path(args.input))
-    if args.part1:
-        print(part1(data))
-    else:  # part2
-        print(part2(data))
