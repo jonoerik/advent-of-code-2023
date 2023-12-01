@@ -5,7 +5,7 @@ https://adventofcode.com/2023/
 
 | Day | Solved |
 | --- | --- |
-| 1 | ❌ |
+| 1 | ✔ |
 | 2 | ❌ |
 | 3 | ❌ |
 | 4 | ❌ |
