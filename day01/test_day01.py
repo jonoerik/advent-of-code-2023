@@ -1,6 +1,9 @@
 from day01 import *
 
 from pathlib import Path
+import re
+
+sample_regex = re.compile(r"sample\d+")
 
 
 def load_answer(path: Path) -> int:
@@ -9,12 +12,14 @@ def load_answer(path: Path) -> int:
 
 
 def pytest_generate_tests(metafunc):
-    data_dir = Path("data")
-    sample_files = sorted([p for p in data_dir.iterdir() if p.name.startswith("sample")])
+    data_dir = Path(__file__).resolve().parent / "data"
+    sample_files = sorted([p for p in data_dir.iterdir() if sample_regex.fullmatch(p.name)]) + [data_dir / "input"]
     if "answer1" in metafunc.fixturenames:
         suffix = "answer1"
     elif "answer2" in metafunc.fixturenames:
         suffix = "answer2"
+    else:
+        assert False
 
     arguments = []
     for s in sample_files:
