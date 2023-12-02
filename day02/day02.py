@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import math
 from pathlib import Path
 import re
 
@@ -8,8 +9,6 @@ import re
 # Cube counts are (red, green, blue).
 InputType = dict[int, list[tuple[int, int, int]]]
 ResultType = int
-
-max_balls = (12, 13, 14)
 
 
 def load(input_path: Path) -> InputType:
@@ -40,9 +39,13 @@ def load(input_path: Path) -> InputType:
 
 
 def part1(input_data: InputType) -> ResultType:
+    max_balls = (12, 13, 14)
     return sum([game_id for game_id, game_sets in input_data.items() if
         all([all([a <= b for a, b in zip(game_set, max_balls)]) for game_set in game_sets])])
 
 
 def part2(input_data: InputType) -> ResultType:
-    pass  #TODO
+    def get_min_set(sets: list[tuple[int, int, int]]) -> tuple[int, int, int]:
+        return tuple([max(x) for x in zip(*sets)])
+
+    return sum([math.prod(min_set) for min_set in map(get_min_set, input_data.values())])
