@@ -3,10 +3,10 @@
 # pytest dynamic test finder
 # Usage:
 #     pytest
-#     pytest -v                 # List all tests found
-#     pytest -k day01           # Run all tests from day01
-#     pytest -k day01 -k part1  # Run tests for first part of day01
-#     pytest -k main            # Only run actual puzzles, not test inputs
+#     pytest -v                   # List all tests found
+#     pytest -k day01             # Run all tests from day01
+#     pytest -k "day01 and part1" # Run tests for first part of day01
+#     pytest -k main              # Only run actual puzzles, not test inputs
 
 import aoc2023
 
