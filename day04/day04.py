@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import re
+import sys
 
 # Dictionary from game number to (winning numbers, your numbers)
 InputType = dict[int, tuple[set[int], set[int]]]
@@ -30,4 +31,14 @@ def part1(input_data: InputType) -> ResultType:
 
 
 def part2(input_data: InputType) -> ResultType:
-    pass  #TODO
+    card_counts: dict[int, int] = {i: 1 for i in input_data.keys()}
+    # Dicts are insertion ordered as of Python 3.7, required here for our iteration through input_data.keys().
+    assert sys.version_info >= (3, 7)
+
+    num_games = len(input_data)
+    for i in input_data.keys():
+        winning_numbers = len(input_data[i][1].intersection(input_data[i][0]))
+        for j in range(i + 1, min(num_games + 1, i + 1 + winning_numbers)):
+            card_counts[j] += card_counts[i]
+
+    return sum(card_counts.values())
