@@ -26,4 +26,12 @@ def part1(input_data: InputType) -> ResultType:
 
 
 def part2(input_data: InputType) -> ResultType:
-    pass  #TODO
+    time = int("".join([str(x) for x, _ in input_data]))
+    distance = int("".join([str(y) for _, y in input_data]))
+    result = 0
+    # Just brute force this by trying every possible time option.
+    # Could optimise this, as t * (time - t) is an upside down parabola.
+    for t in range(1, time):
+        if t * (time - t) > distance:
+            result += 1
+    return result
