@@ -28,10 +28,10 @@ def part1(input_data: InputType) -> ResultType:
 def part2(input_data: InputType) -> ResultType:
     time = int("".join([str(x) for x, _ in input_data]))
     distance = int("".join([str(y) for _, y in input_data]))
-    result = 0
-    # Just brute force this by trying every possible time option.
-    # Could optimise this, as t * (time - t) is an upside down parabola.
-    for t in range(1, time):
-        if t * (time - t) > distance:
-            result += 1
-    return result
+    # Graph of distance travelled (y), against time button held (x), is a downwards-opening parabola, with intercepts at
+    # x = 0 and x = time. We need to find the points where this parabola intersects y = distance, which we can do with
+    # the quadratic formula. We then take the ceiling, which gives the first button-time which beats the record.
+    # From the symmetry of the graph, we know that the other intersection will be at time - min_time_to_win, and we
+    # can calculate the number of time options between the two.
+    min_time_to_win = math.ceil((time - math.sqrt(time ** 2 - 4 * distance)) / 2)
+    return time - 2 * min_time_to_win + 1
