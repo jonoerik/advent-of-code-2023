@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from collections.abc import Callable
 import functools
 from pathlib import Path
 
@@ -12,6 +13,27 @@ ResultType = int
 def load(input_path: Path) -> InputType:
     with open(input_path) as f:
         return [(hand, int(bid)) for hand, bid in [line.strip().split() for line in f.readlines()]]
+
+
+def total_score(input_data: InputType, card_values: str, hand_type_score_func: Callable[[HandType], int]) -> ResultType:
+    def compare_hands(a: HandType, b: HandType) -> int:
+        a_score = hand_type_score_func(a)
+        b_score = hand_type_score_func(b)
+        if a_score < b_score:
+            return -1
+        if b_score < a_score:
+            return 1
+
+        for i in range(len(a)):
+            if card_values.index(a[i]) > card_values.index(b[i]):
+                return -1
+            if card_values.index(b[i]) > card_values.index(a[i]):
+                return 1
+
+        return 0
+
+    return sum([rank * hand[1] for rank, hand in
+                enumerate(sorted(input_data, key=functools.cmp_to_key(lambda a, b: compare_hands(a[0], b[0]))), 1)])
 
 
 def part1(input_data: InputType) -> ResultType:
@@ -32,24 +54,7 @@ def part1(input_data: InputType) -> ResultType:
             (1, 1, 1, 1, 1): 0  # High card
         }[tuple([x for x in sorted([h.count(val) for val in card_values], reverse=True) if x != 0])]
 
-    def compare_hands(a: HandType, b: HandType) -> int:
-        a_score = hand_type_score(a)
-        b_score = hand_type_score(b)
-        if a_score < b_score:
-            return -1
-        if b_score < a_score:
-            return 1
-
-        for i in range(len(a)):
-            if card_values.index(a[i]) > card_values.index(b[i]):
-                return -1
-            if card_values.index(b[i]) > card_values.index(a[i]):
-                return 1
-
-        return 0
-
-    return sum([rank * hand[1] for rank, hand in
-                enumerate(sorted(input_data, key=functools.cmp_to_key(lambda a, b: compare_hands(a[0], b[0]))), 1)])
+    return total_score(input_data, card_values, hand_type_score)
 
 
 def part2(input_data: InputType) -> ResultType:
@@ -75,22 +80,4 @@ def part2(input_data: InputType) -> ResultType:
             (1, 1, 1, 1, 1): 0  # High card
         }[tuple(hand_shape)]
 
-    # Remainder of solution is the same as part1.
-    def compare_hands(a: HandType, b: HandType) -> int:
-        a_score = hand_type_score(a)
-        b_score = hand_type_score(b)
-        if a_score < b_score:
-            return -1
-        if b_score < a_score:
-            return 1
-
-        for i in range(len(a)):
-            if card_values.index(a[i]) > card_values.index(b[i]):
-                return -1
-            if card_values.index(b[i]) > card_values.index(a[i]):
-                return 1
-
-        return 0
-
-    return sum([rank * hand[1] for rank, hand in
-                enumerate(sorted(input_data, key=functools.cmp_to_key(lambda a, b: compare_hands(a[0], b[0]))), 1)])
+    return total_score(input_data, card_values, hand_type_score)
