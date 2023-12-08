@@ -27,4 +27,24 @@ def part1(input_data: InputType) -> ResultType:
 
 
 def part2(input_data: InputType) -> ResultType:
-    pass  #TODO
+    instructions = [0 if c == "L" else 1 for c in input_data[0]]
+    node_list = list(input_data[1].keys())
+    # For the matching index in node_list, is this node an end node.
+    is_end_node = [True if node.endswith("Z") else False for node in node_list]
+    # For the matching index in node_list, what are the left and right connected nodes.
+    node_map = [(node_list.index(input_data[1][node][0]), node_list.index(input_data[1][node][1])) for node in node_list]
+    ghosts = [node_list.index(node) for node in input_data[1].keys() if node.endswith("A")]
+    steps = 0
+    instruction_offset = 0
+    while True:
+        all_at_end = True
+        for i in range(len(ghosts)):
+            if not is_end_node[ghosts[i]]:
+                all_at_end = False
+        if all_at_end:
+            break
+        for i in range(len(ghosts)):
+            ghosts[i] = node_map[ghosts[i]][instructions[instruction_offset]]
+        steps += 1
+        instruction_offset = (instruction_offset + 1) % len(instructions)
+    return steps
