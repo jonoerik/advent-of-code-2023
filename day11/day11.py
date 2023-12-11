@@ -32,4 +32,16 @@ def part1(input_data: InputType) -> ResultType:
 
 
 def part2(input_data: InputType) -> ResultType:
-    pass  #TODO
+    expansion_factor = 1_000_000
+    empty_rows = [row for row, line in enumerate(input_data) if not any(line)]
+    empty_cols = [col for col in range(len(input_data[0])) if not any([line[col] for line in input_data])]
+    galaxies: list[tuple[int, int]] = \
+        [(row, col) for row, line in enumerate(input_data) for col, cell in enumerate(line) if cell]
+
+    total_distance = 0
+    for a, b in itertools.combinations(galaxies, 2):
+        row_range = range(min(a[0], b[0]) + 1, max(a[0], b[0]))
+        col_range = range(min(a[1], b[1]) + 1, max(a[1], b[1]))
+        total_distance += abs(a[0] - b[0]) + (expansion_factor - 1) * len([x for x in empty_rows if x in row_range]) + \
+            abs(a[1] - b[1]) + (expansion_factor - 1) * len([x for x in empty_cols if x in col_range])
+    return total_distance
