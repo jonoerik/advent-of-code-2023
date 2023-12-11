@@ -31,8 +31,7 @@ def part1(input_data: InputType) -> ResultType:
     return sum([abs(a[0] - b[0]) + abs(a[1] - b[1]) for a, b in itertools.combinations(galaxies, 2)])
 
 
-def part2(input_data: InputType) -> ResultType:
-    expansion_factor = 1_000_000
+def part2(input_data: InputType, expansion_factor: int = 1_000_000) -> ResultType:
     empty_rows = [row for row, line in enumerate(input_data) if not any(line)]
     empty_cols = [col for col in range(len(input_data[0])) if not any([line[col] for line in input_data])]
     galaxies: list[tuple[int, int]] = \

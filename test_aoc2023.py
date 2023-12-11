@@ -14,6 +14,13 @@ from pathlib import Path
 import re
 
 
+def try_convert_int(s: str) -> int | str:
+    """If s contains only digits, return the integer it represents, otherwise just return s."""
+    if s.isdigit():
+        return int(s)
+    return s
+
+
 def pytest_generate_tests(metafunc):
     if metafunc.function == test:
         top_dir = Path(__file__).resolve().parent
@@ -21,7 +28,7 @@ def pytest_generate_tests(metafunc):
         sample_regex = re.compile(r"sample\d+")
 
         # Dictionary from test_identifier to tuple of test arguments.
-        tests: dict[str, tuple[int, Path, bool, int | str]] = {}
+        tests: dict[str, tuple[int, Path, bool, int | str, dict[str, int | str]]] = {}
 
         for day_dir in sorted(top_dir.iterdir()):
             if day_match := day_regex.fullmatch(day_dir.name):
@@ -36,15 +43,21 @@ def pytest_generate_tests(metafunc):
                         if answer_file.exists():
                             input_name = "main" if test_input.name == "input" else test_input.name
                             with open(answer_file) as f:
-                                answer = f.read().strip()
-                                if answer.isdigit():
-                                    answer = int(answer)
-                            tests[f"day{day:02} part{part}: {input_name}"] = (day, test_input, part == 1, answer)
+                                for answer_line in f.readlines():
+                                    answer_line = answer_line.strip()
+                                    if ": " in answer_line:
+                                        extra_args = {extra_arg.split("=")[0]: try_convert_int(extra_arg.split("=")[1]) for extra_arg in answer_line.split(": ")[0].split(",")}
+                                        answer = answer_line.split(": ")[1]
+                                    else:
+                                        extra_args = {}
+                                        answer = answer_line
+                                    answer = try_convert_int(answer)
+                                    tests[f"day{day:02} part{part}: {input_name}" + (" " + str(extra_args) if extra_args else "")] = (day, test_input, part == 1, answer, extra_args)
 
         arguments = tests.items()
-        metafunc.parametrize(["day", "input_path", "part1", "answer"], [arg[1] for arg in arguments],
+        metafunc.parametrize(["day", "input_path", "part1", "answer", "extra_args"], [arg[1] for arg in arguments],
             ids=[arg[0] for arg in arguments])
 
 
-def test(day: int, input_path: Path, part1: bool, answer: int | str) -> None:
-    assert aoc2023.run_puzzle(day, input_path, part1) == answer
+def test(day: int, input_path: Path, part1: bool, answer: int | str, extra_args: dict[str, int | str]) -> None:
+    assert aoc2023.run_puzzle(day, input_path, part1, **extra_args) == answer

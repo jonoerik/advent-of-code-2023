@@ -6,13 +6,13 @@ from pathlib import Path
 import sys
 
 
-def run_puzzle(day: int, input_path: Path, part1: bool) -> int | str:
+def run_puzzle(day: int, input_path: Path, part1: bool, **kwargs) -> int | str:
     day_module = importlib.import_module(f"day{day:02}.day{day:02}")
     data = day_module.load(input_path)
     if part1:
-        return day_module.part1(data)
+        return day_module.part1(data, **kwargs)
     else:
-        return day_module.part2(data)
+        return day_module.part2(data, **kwargs)
 
 
 if __name__ == "__main__":
