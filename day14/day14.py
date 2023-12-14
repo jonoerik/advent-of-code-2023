@@ -11,7 +11,7 @@ def load(input_path: Path) -> InputType:
         return [line.strip() for line in f.readlines()]
 
 
-def part1(input_data: InputType) -> ResultType:
+def north_load(input_data: InputType) -> ResultType:
     # Transpose input_data, as working row-by-row will be easier.
     input_data = ["".join(col) for col in zip(*input_data)]
     # Load produced by a single rounded rock at the north-most edge.
@@ -29,5 +29,21 @@ def part1(input_data: InputType) -> ResultType:
     return total_load
 
 
+def part1(input_data: InputType) -> ResultType:
+    return north_load(input_data)
+
+
 def part2(input_data: InputType) -> ResultType:
-    pass  #TODO
+    def roll_line_right(line: str) -> str:
+        areas_between_squares = line.split("#")
+        return "#".join([("." * (len(area) - rounded_boulders)) + ("O" * rounded_boulders) for area, rounded_boulders in [(area, area.count("O")) for area in areas_between_squares]])
+
+    def spin_cycle() -> None:
+        nonlocal input_data
+        for cycle in range(4):
+            # Rotate clockwise, and roll each line to the right.
+            input_data = [roll_line_right("".join(reversed(col))) for col in zip(*input_data)]
+
+    for i in range(1_000_000_000):
+        spin_cycle()
+    return north_load(input_data)
