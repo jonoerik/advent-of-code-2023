@@ -34,9 +34,9 @@ class Beam(typing.NamedTuple):
             (self.col + 1 if self.direction == BeamDirection.RIGHT else self.col)
 
 
-def part1(input_data: InputType) -> ResultType:
-    beams = [Beam(0, -1, BeamDirection.RIGHT)]
-    beam_history = {beams[0]}
+def energised_tiles(input_data: InputType, starting_beam: Beam) -> int:
+    beams = [starting_beam]
+    beam_history = {starting_beam}
     energised = [[False for col in range(len(input_data[0]))] for row in range(len(input_data))]
 
     while beams:
@@ -87,5 +87,13 @@ def part1(input_data: InputType) -> ResultType:
     return sum([1 if cell else 0 for row in energised for cell in row])
 
 
+def part1(input_data: InputType) -> ResultType:
+    return energised_tiles(input_data, Beam(0, -1, BeamDirection.RIGHT))
+
+
 def part2(input_data: InputType) -> ResultType:
-    pass  #TODO
+    return max(energised_tiles(input_data, beam) for beam in
+               [Beam(row, col, direction) for row in range(len(input_data))
+                for col, direction in [(-1, BeamDirection.RIGHT), (len(input_data[0]), BeamDirection.LEFT)]] +
+               [Beam(row, col, direction) for col in range(len(input_data[0]))
+                for row, direction in [(-1, BeamDirection.DOWN), (len(input_data), BeamDirection.UP)]])
