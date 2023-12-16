@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from enum import Enum
+import multiprocessing
 from pathlib import Path
 import typing
 
@@ -92,8 +93,9 @@ def part1(input_data: InputType) -> ResultType:
 
 
 def part2(input_data: InputType) -> ResultType:
-    return max(energised_tiles(input_data, beam) for beam in
-               [Beam(row, col, direction) for row in range(len(input_data))
-                for col, direction in [(-1, BeamDirection.RIGHT), (len(input_data[0]), BeamDirection.LEFT)]] +
-               [Beam(row, col, direction) for col in range(len(input_data[0]))
-                for row, direction in [(-1, BeamDirection.DOWN), (len(input_data), BeamDirection.UP)]])
+    with multiprocessing.Pool() as pool:
+        return max(pool.starmap(energised_tiles,
+                   [(input_data, Beam(row, col, direction)) for row in range(len(input_data))
+                    for col, direction in [(-1, BeamDirection.RIGHT), (len(input_data[0]), BeamDirection.LEFT)]] +
+                   [(input_data, Beam(row, col, direction)) for col in range(len(input_data[0]))
+                    for row, direction in [(-1, BeamDirection.DOWN), (len(input_data), BeamDirection.UP)]]))
