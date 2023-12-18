@@ -35,12 +35,32 @@ def min_heat_loss(input_data: InputType, start_pos: tuple[int, int], end_pos: tu
                   min_straight_length: int, max_straight_length: int) -> int:
     """Use A* Algorithm."""
 
+    def heuristic_table() -> list[list[int]]:
+        """Calculate a table of values for the A* heuristic to use.
+        Here we use Dijkstra's Algorithm starting at end_pos to calculate the minimum possible distance from each
+        position to end_pos. If the crucibles had no constraints on their movement/turns, then this would be the
+        actual distance to end_pos."""
+        result = [[None for col in range(len(input_data[0]))] for row in range(len(input_data))]
+        # Heap of (distance, row, col).
+        next_h_nodes: list[tuple[int, int, int]] = []
+        heapq.heappush(next_h_nodes, (0, len(input_data) - 1, len(input_data[0]) - 1))
+        while next_h_nodes:
+            dist, row, col = heapq.heappop(next_h_nodes)
+            if result[row][col] is not None:
+                # Node already visited.
+                continue
+            result[row][col] = dist
+            for next_row, next_col in [(row-1, col), (row+1, col), (row, col-1), (row, col+1)]:
+                if 0 <= next_row < len(result) and 0 <= next_col < len(result[0]):
+                    heapq.heappush(next_h_nodes, (dist + input_data[row][col], next_row, next_col))
+        return result
+    h_table = heuristic_table()
+
     def h(row: int, col: int) -> int:
         """A* heuristic for cost of path from (row, col) to end_pos.
         This must always be less than or equal to the actual cost of reaching the end, for A* to follow an optimal
         path (i.e. h must be admissible)."""
-        # Assume every tile between here and the end is 1.
-        return len(input_data) - row + len(input_data[0]) - col
+        return h_table[row][col]
 
     # Heap of (distance to node + expected distance to end, distance to node, node) to visit next.
     next_nodes: list[tuple[int, int, PathNode]] = []
