@@ -33,18 +33,28 @@ class PathNode(typing.NamedTuple):
 
 def min_heat_loss(input_data: InputType, start_pos: tuple[int, int], end_pos: tuple[int, int],
                   min_straight_length: int, max_straight_length: int) -> int:
-    """Use Dijkstra's Algorithm."""
-    # Heap of (distance to node, node) to visit next.
-    next_nodes: list[tuple[int, PathNode]] = []
-    # Set of nodes already visited.
-    visited: set[PathNode] = set()
-    heapq.heappush(next_nodes, (0, PathNode(start_pos[0], start_pos[1], None, 0)))
+    """Use A* Algorithm."""
+
+    def h(row: int, col: int) -> int:
+        """A* heuristic for cost of path from (row, col) to end_pos.
+        This must always be less than or equal to the actual cost of reaching the end, for A* to follow an optimal
+        path (i.e. h must be admissible)."""
+        # Assume every tile between here and the end is 1.
+        return len(input_data) - row + len(input_data[0]) - col
+
+    # Heap of (distance to node + expected distance to end, distance to node, node) to visit next.
+    next_nodes: list[tuple[int, int, PathNode]] = []
+    # Dict of nodes already visited, to the cost to reach that node.
+    visited: dict[PathNode, int] = {}
+    heapq.heappush(next_nodes, (h(*start_pos), 0, PathNode(start_pos[0], start_pos[1], None, 0)))
 
     while next_nodes:
-        dist, node = heapq.heappop(next_nodes)
-        if node in visited:
+        expected, dist, node = heapq.heappop(next_nodes)
+        # Allow nodes to be revisited if they've been only been seen before with a higher cost.
+        # This allows us to write a heuristic that's only admissible, but doesn't have to be consistent.
+        if node in visited and visited[node] <= dist:
             continue
-        visited.add(node)
+        visited[node] = dist
 
         if (node.row, node.col) == end_pos and min_straight_length <= node.last_move_length:
             return dist
@@ -70,7 +80,8 @@ def min_heat_loss(input_data: InputType, start_pos: tuple[int, int], end_pos: tu
                 continue
 
             new_node = PathNode(new_row, new_col, d, new_move_length)
-            heapq.heappush(next_nodes, (dist + input_data[new_row][new_col], new_node))
+            new_dist = dist + input_data[new_row][new_col]
+            heapq.heappush(next_nodes, (new_dist + h(new_row, new_col), new_dist, new_node))
 
     # Should have found a path to the end before running out of nodes.
     assert False
