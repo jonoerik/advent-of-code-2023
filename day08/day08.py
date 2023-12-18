@@ -28,6 +28,9 @@ def part1(input_data: InputType) -> ResultType:
 
 
 def part2(input_data: InputType) -> ResultType:
+    # This solution is correct, even if not all ghosts are of a 'simple' type (looping with a single end node), but
+    # relies on most ghosts being simple in order to return a solution in a reasonable time.
+
     class Ghost:
         def __init__(self, start_node: str):
             def find_loop() -> None:
