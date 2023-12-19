@@ -38,6 +38,68 @@ Line = tuple[Point, Point]
 
 
 def part1(input_data: InputType) -> ResultType:
+    def dig_trench() -> list[list[bool]]:
+        row = 0
+        col = 0
+        result = [[True]]
+        for direction, dist, colour in input_data:
+            match direction:
+                case Direction.UP:
+                    dist_to_edge = min(row, dist)
+                    for i in range(dist_to_edge):
+                        result[row - i - 1][col] = True
+                    if dist_to_edge < dist:
+                        result = [[c == col for c in range(len(result[0]))]
+                                  for _ in range(dist - dist_to_edge)] + result
+                    row = max(0, row - dist)
+                case Direction.RIGHT:
+                    dist_to_edge = min(len(result[0]) - 1 - col, dist)
+                    for i in range(dist_to_edge):
+                        result[row][col + i + 1] = True
+                    if dist_to_edge < dist:
+                        result = [r + [n == row for _ in range(dist - dist_to_edge)]
+                                  for n, r in enumerate(result)]
+                    col += dist
+                case Direction.DOWN:
+                    dist_to_edge = min(len(result) - 1 - row, dist)
+                    for i in range(dist_to_edge):
+                        result[row + i + 1][col] = True
+                    if dist_to_edge < dist:
+                        result = result + [[c == col for c in range(len(result[0]))]
+                                           for _ in range(dist - dist_to_edge)]
+                    row += dist
+                case Direction.LEFT:
+                    dist_to_edge = min(col, dist)
+                    for i in range(dist_to_edge):
+                        result[row][col - i - 1] = True
+                    if dist_to_edge < dist:
+                        result = [[n == row for _ in range(dist - dist_to_edge)] + r
+                                  for n, r in enumerate(result)]
+                    col = max(0, col - dist)
+        return result
+    trench = dig_trench()
+
+    def dig_middle() -> list[list[bool]]:
+        result = [[True for _ in range(len(trench[0]))] for _ in range(len(trench))]
+        # Flood fill from outer edges.
+        to_visit = {(0, i) for i in range(len(trench[0]))} | {(len(trench) - 1, i) for i in range(len(trench[0]))} | \
+                   {(i, 0) for i in range(len(trench))} | {(i, len(trench[0]) - 1) for i in range(len(trench))}
+        while to_visit:
+            visiting = to_visit.pop()
+            if 0 <= visiting[0] < len(trench) and 0 <= visiting[1] < len(trench[0]) and \
+                    result[visiting[0]][visiting[1]] and not trench[visiting[0]][visiting[1]]:
+                result[visiting[0]][visiting[1]] = False
+                to_visit.update({(visiting[0] + dr, visiting[1] + dc) for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]})
+        return result
+    pit = dig_middle()
+
+    return sum([1 if cell else 0 for row in pit for cell in row])
+
+
+def part2(input_data: InputType) -> ResultType:
+    input_data = [({0: Direction.RIGHT, 1: Direction.DOWN, 2: Direction.LEFT, 3: Direction.UP}
+                   [int(c[5])], int(c[:5], 16), c) for a, b, c in input_data]
+
     def dig_trenches() -> list[Polygon]:
         """From the set of trench digging instructions, produce a set of square polygons around the areas that have
         been dug out."""
@@ -177,7 +239,7 @@ def part1(input_data: InputType) -> ResultType:
         """My own algorithm (though likely already described elsewhere) for finding the area within a rectilinear
         polygon."""
         # Find column coordinates where a line either begins or ends.
-        # Between adjacent column_ends, the polygon exists as bands, sets of rectangles between one column and the
+        # Between adjacent column_ends, the polygon exists as bands; sets of rectangles between one column and the
         # other. Additionally, the polygon is bounded by the outermost column_ends.
         column_ends = sorted(set([c for _, c in poly]))
 
@@ -191,14 +253,11 @@ def part1(input_data: InputType) -> ResultType:
             horizontals = sorted(intersecting_horizontals(start_col, end_col))
             # Within each column, there should be an even number of crossing horizontal lines.
             assert len(horizontals) % 2 == 0
+            # For 2n lines crossing this column, there must be n rectangular areas inside the polygon.
+            # Areas between the horizontal lines alternate in/out of the polygon.
             for start_row, end_row in zip(horizontals[::2], horizontals[1::2]):
                 result += abs(end_col - start_col) * abs(end_row - start_row)
 
         return result
 
     return calculate_area(find_outline(split_at_intersections(dig_trenches())))
-
-
-def part2(input_data: InputType) -> ResultType:
-    input_data = [({0: Direction.RIGHT, 1: Direction.DOWN, 2: Direction.LEFT, 3: Direction.UP}[int(c[5])], int(c[:5], 16), c) for a, b, c in input_data]
-    return part1(input_data)
