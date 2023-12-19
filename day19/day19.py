@@ -13,7 +13,7 @@ class MachinePart(typing.NamedTuple):
 
 
 Workflow = list[tuple[str, str, int, str] | str]
-InputType = tuple[dict[int, Workflow], list[MachinePart]]
+InputType = tuple[dict[str, Workflow], list[MachinePart]]
 ResultType = int
 
 workflow_regex = re.compile(r"^(?P<name>[a-z]+)\{(?P<rules>[^}]+),(?P<unconditional_rule>\w+)}$")
@@ -78,4 +78,56 @@ def part1(input_data: InputType) -> ResultType:
 
 
 def part2(input_data: InputType) -> ResultType:
-    pass  #TODO
+    workflows, _ = input_data
+
+    class MachinePartRange(typing.NamedTuple):
+        """Ranges are inclusive of both lower and upper bound."""
+        x: tuple[int, int]
+        m: tuple[int, int]
+        a: tuple[int, int]
+        s: tuple[int, int]
+
+    def range_split(part_range: MachinePartRange, member: str, v: int,
+                    comparison: typing.Callable[[int, int], bool],
+                    make_new_range: typing.Callable[[tuple[int, int], int], tuple[int, int]]
+                    ) -> MachinePartRange | None:
+        member_range = getattr(part_range, member)
+        if all([comparison(x, v) for x in member_range]):
+            return part_range
+        if not any([comparison(x, v) for x in member_range]):
+            return None
+        # Quick hack to return MachinePartRange with a single member modified.
+        return MachinePartRange(**{m: make_new_range(member_range, v) if m == member else n
+                                   for m, n in part_range._asdict().items()})
+
+    def accepted_ranges(part_range: MachinePartRange, workflow: str, rule_index: int) -> list[MachinePartRange]:
+        match workflows[workflow][rule_index]:
+            case member, "<", v, target_workflow:
+                result = []
+                if mpr := range_split(part_range, member, v, lambda a, b: a < b, lambda a, b: (a[0], b-1)):
+                    if target_workflow == "A":
+                        result.append(mpr)
+                    elif target_workflow != "R":
+                        result.extend(accepted_ranges(mpr, target_workflow, 0))
+                if mpr := range_split(part_range, member, v, lambda a, b: a >= b, lambda a, b: (b, a[1])):
+                    result.extend(accepted_ranges(mpr, workflow, rule_index+1))
+                return result
+            case member, ">", v, target_workflow:
+                result = []
+                if mpr := range_split(part_range, member, v, lambda a, b: a > b, lambda a, b: (b + 1, a[1])):
+                    if target_workflow == "A":
+                        result.append(mpr)
+                    elif target_workflow != "R":
+                        result.extend(accepted_ranges(mpr, target_workflow, 0))
+                if mpr := range_split(part_range, member, v, lambda a, b: a <= b, lambda a, b: (a[0], b)):
+                    result.extend(accepted_ranges(mpr, workflow, rule_index + 1))
+                return result
+            case "A":
+                return [part_range]
+            case "R":
+                return []
+            case target_workflow:
+                return accepted_ranges(part_range, target_workflow, 0)
+
+    return sum([(ar.x[1] - ar.x[0] + 1) * (ar.m[1] - ar.m[0] + 1) * (ar.a[1] - ar.a[0] + 1) * (ar.s[1] - ar.s[0] + 1)
+                for ar in accepted_ranges(MachinePartRange((1, 4000), (1, 4000), (1, 4000), (1, 4000)), "in", 0)])
