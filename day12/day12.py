@@ -28,6 +28,21 @@ easy_reversed_regex = re.compile(r"(?:\.|#|(?:^|\.)\?+)$")
 easyish_reversed_regex = re.compile(r"#(\?+)$")
 
 
+def memoize_possible_layouts(func):
+    memo = {}
+
+    def inner(s: str, groups: list[int]) -> int:
+        key = (s, tuple(groups))
+        if key in memo:
+            return memo[key]
+        result = func(s, groups)
+        memo[key] = result
+        return result
+
+    return inner
+
+
+@memoize_possible_layouts
 def possible_layouts(s: str, groups: list[int]) -> int:
     if len(groups) == 0:
         if "#" in s:
@@ -109,9 +124,17 @@ def possible_layouts(s: str, groups: list[int]) -> int:
     assert False  # The given regexes should catch all cases of s.
 
 
+def possible_layouts_shim(*args, **kwargs):
+    """Required, as possible_layouts() can't be used with pool.starmap (due to decorator with local memo variable).
+    Note that different processes may see different memo dictionaries. This shouldn't affect correctness, as a
+    missing entry in that dictionary would just be recalculated, and possible_layouts() is a pure function which
+    will return the same result in each process."""
+    return possible_layouts(*args, **kwargs)
+
+
 def part1(input_data: InputType) -> ResultType:
     with multiprocessing.Pool() as pool:
-        return sum(pool.starmap(possible_layouts, input_data))
+        return sum(pool.starmap(possible_layouts_shim, input_data))
 
 
 def part2(input_data: InputType) -> ResultType:
