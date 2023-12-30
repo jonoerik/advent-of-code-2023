@@ -31,10 +31,9 @@ def part1(input_data: InputType, steps: int = 64) -> ResultType:
         return False
 
     for _ in range(steps):
-        new_garden = ["".join([cell if cell == TileState.BLOCKED else
-                               (TileState.ON if on_in_neighbourhood(row_index, col_index) else TileState.OFF)
-                               for col_index, cell in enumerate(row)]) for row_index, row in enumerate(input_data)]
-        input_data = new_garden
+        input_data = [[cell if cell == TileState.BLOCKED else
+                       (TileState.ON if on_in_neighbourhood(row_index, col_index) else TileState.OFF)
+                       for col_index, cell in enumerate(row)] for row_index, row in enumerate(input_data)]
 
     return sum([row.count(TileState.ON) for row in input_data])
 
