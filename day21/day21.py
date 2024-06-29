@@ -16,9 +16,17 @@ def load(input_path: Path) -> InputType:
 
 
 class CellState(IntEnum):
+    # Never been ON.
     OFF = 0
     ON = 1
     BLOCKED = 2
+    # Was ON last timestep, but OFF now. Only used in part2.
+    NEWLY_OFF = 3
+    # State transitions:
+    # BLOCKED -> BLOCKED
+    # OFF -> OFF | ON
+    # ON -> NEWLY_OFF
+    # NEWLY_OFF -> ON
 
 
 def part1(input_data: InputType, steps: int = 64) -> ResultType:
@@ -84,9 +92,9 @@ class TileInterface(abc.ABC):
 
     @abc.abstractmethod
     def can_replace_with_filled(self) -> FilledReplacementStatus:
-        """Return True if this tile contains a checkerboard of OFF/ON cells, and can therefore be replaced with a fixed
-        (i.e. non-simulated tile). For tiles that have already been converted to fixed, this will return False, as no
-        replacement is necessary."""
+        """Return True if this tile contains a checkerboard of NEWLY_OFF/ON cells, and can therefore be replaced with a
+        fixed (i.e. non-simulated tile). For tiles that have already been converted to fixed, this will return False, as
+        no replacement is necessary."""
         pass
 
 
@@ -151,8 +159,10 @@ class Tile(TileInterface):
     def calculate_next_state(self, all_tiles: dict[tuple[int, int], TileInterface], current_step: int) -> None:
         assert self._next_cells is None
         self._next_cells = [[CellState.BLOCKED if cell == CellState.BLOCKED else
-                             (CellState.ON if self._on_in_neighbourhood(r, c, all_tiles, current_step) else
-                              CellState.OFF)
+                             (CellState.NEWLY_OFF if cell == CellState.ON else
+                              (CellState.ON if cell == CellState.NEWLY_OFF else
+                               (CellState.ON if self._on_in_neighbourhood(r, c, all_tiles, current_step) else
+                                CellState.OFF)))
                              for c, cell in enumerate(row)]
                             for r, row in enumerate(self._cells)]
 
@@ -196,25 +206,14 @@ class FilledTile(TileInterface):
 
     def cell_on(self, row: int, col: int, current_step: int) -> bool:
         return self._cells[row][col] == CellState.ON if current_step % 2 == 0 \
-            else self._cells[row][col] == CellState.OFF
+            else self._cells[row][col] == CellState.NEWLY_OFF
 
     def adjacent_tiles_required(self, current_step: int) -> list[tuple[int, int]]:
-        result = []
-        required_state = CellState.ON if current_step % 2 == 0 else CellState.OFF
-
-        if required_state in self._cells[0]:
-            result.append((-1, 0))
-        if required_state in self._cells[-1]:
-            result.append((1, 0))
-        if required_state in [row[0] for row in self._cells]:
-            result.append((0, -1))
-        if required_state in [row[-1] for row in self._cells]:
-            result.append((0, 1))
-
-        return result
+        # By the time a tile has been completely filled, all adjacent tiles should already have been instantiated.
+        return []
 
     def on_cell_count(self, current_step: int) -> int:
-        required_state = CellState.ON if current_step % 2 == 0 else CellState.OFF
+        required_state = CellState.ON if current_step % 2 == 0 else CellState.NEWLY_OFF
         return len([None for row in self._cells for cell in row if cell == required_state])
 
     def calculate_next_state(self, all_tiles: dict[tuple[int, int], TileInterface], current_step: int) -> None:
@@ -256,11 +255,11 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
             {(0, 0): Tile(0, 0, [[{".": CellState.OFF, "S": CellState.ON, "#": CellState.BLOCKED}[cell] for cell in row]
                                  for row in input_data])}
         filled_tile_even = FilledTile([[CellState.BLOCKED if cell == CellState.BLOCKED else
-                                        (CellState.ON if (r+c) % 2 == 0 else CellState.OFF)
+                                        (CellState.ON if (r+c) % 2 == 0 else CellState.NEWLY_OFF)
                                         for c, cell in enumerate(row)]
                                        for r, row in enumerate(start_tile_cells)])
         filled_tile_odd = FilledTile([[CellState.BLOCKED if cell == CellState.BLOCKED else
-                                      (CellState.ON if (r + c) % 2 == 1 else CellState.OFF)
+                                      (CellState.ON if (r + c) % 2 == 1 else CellState.NEWLY_OFF)
                                       for c, cell in enumerate(row)]
                                      for r, row in enumerate(start_tile_cells)])
 
