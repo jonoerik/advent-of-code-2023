@@ -230,7 +230,12 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
     def is_easy_solve() -> bool:
         """For this puzzle to be easily solvable for large step counts, the input must be a square of an odd width and
         height, with 'S' centred directly in the middle, a perimeter of "." around the edges, and direct paths of "."
-        from S out to each edge."""
+        from S out to each edge. We also rely on puzzle_step_count % tile_width == tile_width / 2 - 0.5, as this
+        ensures the points of the diamond of resulting ON tiles will lie on the edges of their tiles, and all tiles will
+        be one of:
+        * Completely filled
+        * Half filled, approximately along a diagonal
+        * Three-quarter filled, with only two adjacent corners unfilled"""
         if tile_height != tile_width:
             return False
         if tile_height % 2 != 1 or tile_width % 2 != 1:
@@ -242,6 +247,8 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
             if "#" in [row[col] for row in input_data]:
                 return False
         if input_data[tile_height // 2][tile_width // 2] != "S":
+            return False
+        if steps % tile_width != tile_width // 2 or tile_width % 2 != 1:
             return False
         return True
 
