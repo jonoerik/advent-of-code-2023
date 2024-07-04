@@ -98,10 +98,15 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
             super().__init__(cells)
             self._row = tile_row
             self._col = tile_col
+            self._on_even_cells = set([(r, c) for r, row in enumerate(self._cells) for c, cell in enumerate(row)
+                                       if cell == CellState.ON_EVEN])
+            self._on_odd_cells = set([(r, c) for r, row in enumerate(self._cells) for c, cell in enumerate(row)
+                                      if cell == CellState.ON_ODD])
+            self._off_cells = set([(r, c) for r, row in enumerate(self._cells) for c, cell in enumerate(row)
+                                   if cell == CellState.OFF])
 
         def cell_on(self, row: int, col: int, current_step: int) -> bool:
-            required_state = CellState.ON_EVEN if current_step % 2 == 0 else CellState.ON_ODD
-            return self._cells[row][col] == required_state
+            return (row, col) in self._on_even_cells if current_step % 2 == 0 else (row, col) in self._on_odd_cells
 
         def adjacent_tiles_required(self, current_step: int) -> list[tuple[int, int]]:
             result = []
@@ -118,8 +123,7 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
             return result
 
         def on_cell_count(self, current_step: int) -> int:
-            required_state = CellState.ON_EVEN if current_step % 2 == 0 else CellState.ON_ODD
-            return len([None for row in self._cells for cell in row if cell == required_state])
+            return len(self._on_even_cells) if current_step % 2 == 0 else len(self._on_odd_cells)
 
         def _on_in_neighbourhood(self, r: int, c: int, all_tiles: dict[tuple[int, int], TileInterface],
                                  current_step: int) -> bool:
@@ -155,25 +159,27 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
         def advance(self, all_tiles: dict[tuple[int, int], TileInterface], current_step: int) -> None:
             # ON_ODD and ON_EVEN are swapped here, as we're calculating the state for the next step.
             next_state = CellState.ON_ODD if current_step % 2 == 0 else CellState.ON_EVEN
-            for r in range(tile_height):
-                for c in range(tile_width):
-                    if self._cells[r][c] == CellState.OFF:
-                        if self._on_in_neighbourhood(r, c, all_tiles, current_step):
-                            self._cells[r][c] = next_state
+            to_remove = set()
+            for r, c in self._off_cells:
+                if self._on_in_neighbourhood(r, c, all_tiles, current_step):
+                    self._cells[r][c] = next_state
+                    to_remove.add((r, c))
+                    (self._on_even_cells if next_state == CellState.ON_EVEN else self._on_odd_cells).add((r, c))
+            self._off_cells.difference_update(to_remove)
 
         def can_replace_with_filled(self) -> TileInterface.FilledReplacementStatus:
+            if len(self._off_cells) > 0:
+                return TileInterface.FilledReplacementStatus.NO
+
             yes_even = True
             yes_odd = True
             for r, row in enumerate(self._cells):
                 for c, cell in enumerate(row):
-                    if cell == CellState.OFF:
-                        return TileInterface.FilledReplacementStatus.NO
-                    elif cell == CellState.BLOCKED:
-                        pass
-                    elif cell != (CellState.ON_EVEN if (r+c) % 2 == 0 else CellState.ON_ODD):
+                    if cell == (CellState.ON_ODD if (r+c) % 2 == 0 else CellState.ON_EVEN):
                         yes_even = False
-                    elif cell != (CellState.ON_ODD if (r+c) % 2 == 0 else CellState.ON_EVEN):
+                    elif cell == (CellState.ON_EVEN if (r+c) % 2 == 0 else CellState.ON_ODD):
                         yes_odd = False
+
             assert yes_even != yes_odd
             return TileInterface.FilledReplacementStatus.YES_EVEN if yes_even \
                 else TileInterface.FilledReplacementStatus.YES_ODD
