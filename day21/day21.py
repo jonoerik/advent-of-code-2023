@@ -15,21 +15,12 @@ def load(input_path: Path) -> InputType:
         return [line.strip() for line in f.readlines()]
 
 
-class CellState(IntEnum):
-    # Never been ON.
-    OFF = 0
-    ON = 1
-    BLOCKED = 2
-    # Was ON last timestep, but OFF now. Only used in part2.
-    NEWLY_OFF = 3
-    # State transitions:
-    # BLOCKED -> BLOCKED
-    # OFF -> OFF | ON
-    # ON -> NEWLY_OFF
-    # NEWLY_OFF -> ON
-
-
 def part1(input_data: InputType, steps: int = 64) -> ResultType:
+    class CellState(IntEnum):
+        OFF = 0
+        ON = 1
+        BLOCKED = 2
+
     input_data = [[{".": CellState.OFF, "S": CellState.ON, "#": CellState.BLOCKED}[cell] for cell in row]
                   for row in input_data]
 
@@ -52,6 +43,15 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
     tile_height = len(input_data)
     tile_width = len(input_data[0])
 
+    class CellState(IntEnum):
+        # Never been ON.
+        OFF = 0
+        # First turned ON during an even timestep (or ON at start). Will be ON during other even timesteps.
+        ON_EVEN = 1
+        # First turned ON during an odd timestep. Will be ON during other odd timesteps.
+        ON_ODD = 2
+        BLOCKED = 3
+
     class TileInterface(abc.ABC):
         def __init__(self, cells: list[list[CellState]]):
             self._cells = cells
@@ -73,25 +73,17 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
             pass
 
         @abc.abstractmethod
-        def calculate_next_state(self, all_tiles: dict[tuple[int, int], Self], current_step: int) -> None:
-            """Calculate the next state of this tile, based on its own current state, and the current state of all
-            surrounding tiles. This newly calculated state will be made current when advance() is next called."""
-            pass
-
-        @abc.abstractmethod
-        def advance(self, all_tiles: dict[tuple[int, int], Self]) -> None:
-            """Simulate a single step of the puzzle, with ON cells spreading outwards by 1. This state should have
-            been pre-calculated by a call to calculate_next_state(). This is necessary, as all tiles, and all cells
-            within them must advance simultaneously, rather than advancing one tile, then using that new state in the
-            calculation of the adjacent tile's state."""
+        def advance(self, all_tiles: dict[tuple[int, int], Self], current_step: int) -> None:
+            """Advance to the next state of this tile, based on its current state, and the current state of all
+            surrounding tiles."""
             pass
 
         class FilledReplacementStatus(IntEnum):
             # Tile not ready to be replaced by a filled equivalent.
             NO = 0
-            # Tile ready to be replaced, even (row+col) tiles are on.
+            # Tile ready to be replaced, even (row+col) tiles are ON_EVEN.
             YES_EVEN = 1
-            # Tile ready to be replaced, odd (row+col) tiles are on.
+            # Tile ready to be replaced, even (row+col) tiles are ON_ODD.
             YES_ODD = 2
 
         @abc.abstractmethod
@@ -106,28 +98,28 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
             super().__init__(cells)
             self._row = tile_row
             self._col = tile_col
-            self._next_cells = None
-            self._can_replace_filled = TileInterface.FilledReplacementStatus.NO
 
         def cell_on(self, row: int, col: int, current_step: int) -> bool:
-            return self._cells[row][col] == CellState.ON
+            required_state = CellState.ON_EVEN if current_step % 2 == 0 else CellState.ON_ODD
+            return self._cells[row][col] == required_state
 
         def adjacent_tiles_required(self, current_step: int) -> list[tuple[int, int]]:
             result = []
 
-            if CellState.ON in self._cells[0]:
+            if any([cell in [CellState.ON_EVEN, CellState.ON_ODD] for cell in self._cells[0]]):
                 result.append((-1, 0))
-            if CellState.ON in self._cells[-1]:
+            if any([cell in [CellState.ON_EVEN, CellState.ON_ODD] for cell in self._cells[-1]]):
                 result.append((1, 0))
-            if CellState.ON in [row[0] for row in self._cells]:
+            if any([row[0] in [CellState.ON_EVEN, CellState.ON_ODD] for row in self._cells]):
                 result.append((0, -1))
-            if CellState.ON in [row[-1] for row in self._cells]:
+            if any([row[-1] in [CellState.ON_EVEN, CellState.ON_ODD] for row in self._cells]):
                 result.append((0, 1))
 
             return result
 
         def on_cell_count(self, current_step: int) -> int:
-            return len([None for row in self._cells for cell in row if cell == CellState.ON])
+            required_state = CellState.ON_EVEN if current_step % 2 == 0 else CellState.ON_ODD
+            return len([None for row in self._cells for cell in row if cell == required_state])
 
         def _on_in_neighbourhood(self, r: int, c: int, all_tiles: dict[tuple[int, int], TileInterface],
                                  current_step: int) -> bool:
@@ -147,6 +139,7 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
                 elif nc == tile_width:
                     tc += 1
                     nc = 0
+
                 if (tr, tc) == (self._row, self._col):
                     if self.cell_on(nr, nc, current_step):
                         return True
@@ -159,36 +152,31 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
                     pass
             return False
 
-        def calculate_next_state(self, all_tiles: dict[tuple[int, int], TileInterface], current_step: int) -> None:
-            assert self._next_cells is None
-            self._next_cells = [[CellState.BLOCKED if cell == CellState.BLOCKED else
-                                 (CellState.NEWLY_OFF if cell == CellState.ON else
-                                  (CellState.ON if cell == CellState.NEWLY_OFF else
-                                   (CellState.ON if self._on_in_neighbourhood(r, c, all_tiles, current_step) else
-                                    CellState.OFF)))
-                                 for c, cell in enumerate(row)]
-                                for r, row in enumerate(self._cells)]
-
-            if all([self._cells[r][c] == CellState.BLOCKED or
-                    self._cells[r][c] == CellState.ON or
-                    self._next_cells[r][c] == CellState.ON
-                    for r in range(tile_height) for c in range(tile_height)]):
-                if all([cell == CellState.ON or cell == CellState.BLOCKED
-                        for r, row in enumerate(self._next_cells)
-                        for c, cell in enumerate(row) if (r + c) % 2 == 0]):
-                    self._can_replace_filled = TileInterface.FilledReplacementStatus.YES_EVEN
-                else:
-                    self._can_replace_filled = TileInterface.FilledReplacementStatus.YES_ODD
-            else:
-                self._can_replace_filled = TileInterface.FilledReplacementStatus.NO
-
-        def advance(self, all_tiles: dict[tuple[int, int], TileInterface]) -> None:
-            assert self._next_cells is not None
-            self._cells = self._next_cells
-            self._next_cells = None
+        def advance(self, all_tiles: dict[tuple[int, int], TileInterface], current_step: int) -> None:
+            # ON_ODD and ON_EVEN are swapped here, as we're calculating the state for the next step.
+            next_state = CellState.ON_ODD if current_step % 2 == 0 else CellState.ON_EVEN
+            for r in range(tile_height):
+                for c in range(tile_width):
+                    if self._cells[r][c] == CellState.OFF:
+                        if self._on_in_neighbourhood(r, c, all_tiles, current_step):
+                            self._cells[r][c] = next_state
 
         def can_replace_with_filled(self) -> TileInterface.FilledReplacementStatus:
-            return self._can_replace_filled
+            yes_even = True
+            yes_odd = True
+            for r, row in enumerate(self._cells):
+                for c, cell in enumerate(row):
+                    if cell == CellState.OFF:
+                        return TileInterface.FilledReplacementStatus.NO
+                    elif cell == CellState.BLOCKED:
+                        pass
+                    elif cell != (CellState.ON_EVEN if (r+c) % 2 == 0 else CellState.ON_ODD):
+                        yes_even = False
+                    elif cell != (CellState.ON_ODD if (r+c) % 2 == 0 else CellState.ON_EVEN):
+                        yes_odd = False
+            assert yes_even != yes_odd
+            return TileInterface.FilledReplacementStatus.YES_EVEN if yes_even \
+                else TileInterface.FilledReplacementStatus.YES_ODD
 
     class FilledTile(TileInterface):
         """A tile where all non-blocked cells are on or off in a strict checkerboard pattern. All cells alternate
@@ -197,31 +185,23 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
         def __init__(self, cells: list[list[CellState]]):
             """Assumes this tile is being created at step_number == 0."""
             super().__init__(cells)
-            assert all([cell == CellState.BLOCKED or cell == CellState.ON
+            assert all([cell != CellState.OFF
                         for r, row in enumerate(self._cells)
-                        for c, cell in enumerate(row)
-                        if (r + c) % 2 == 0]) or \
-                   all([cell == CellState.BLOCKED or cell == CellState.ON
-                        for r, row in enumerate(self._cells)
-                        for c, cell in enumerate(row)
-                        if (r + c) % 2 == 1])
+                        for c, cell in enumerate(row)])
 
         def cell_on(self, row: int, col: int, current_step: int) -> bool:
-            return self._cells[row][col] == CellState.ON if current_step % 2 == 0 \
-                else self._cells[row][col] == CellState.NEWLY_OFF
+            required_state = CellState.ON_EVEN if current_step % 2 == 0 else CellState.ON_ODD
+            return self._cells[row][col] == required_state
 
         def adjacent_tiles_required(self, current_step: int) -> list[tuple[int, int]]:
             # By the time a tile has been completely filled, all adjacent tiles should already have been instantiated.
             return []
 
         def on_cell_count(self, current_step: int) -> int:
-            required_state = CellState.ON if current_step % 2 == 0 else CellState.NEWLY_OFF
+            required_state = CellState.ON_EVEN if current_step % 2 == 0 else CellState.ON_ODD
             return len([None for row in self._cells for cell in row if cell == required_state])
 
-        def calculate_next_state(self, all_tiles: dict[tuple[int, int], TileInterface], current_step: int) -> None:
-            pass
-
-        def advance(self, all_tiles: dict[tuple[int, int], TileInterface]) -> None:
+        def advance(self, all_tiles: dict[tuple[int, int], TileInterface], current_step: int) -> None:
             pass
 
         def can_replace_with_filled(self) -> TileInterface.FilledReplacementStatus:
@@ -259,19 +239,19 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
         start_tile_cells = [[{".": CellState.OFF, "S": CellState.OFF, "#": CellState.BLOCKED}[cell] for cell in row]
                             for row in input_data]
         tiles: dict[tuple[int, int], TileInterface] = \
-            {(0, 0): Tile(0, 0, [[{".": CellState.OFF, "S": CellState.ON, "#": CellState.BLOCKED}[cell] for cell in row]
+            {(0, 0): Tile(0, 0, [[{".": CellState.OFF, "S": CellState.ON_EVEN, "#": CellState.BLOCKED}[cell]
+                                  for cell in row]
                                  for row in input_data])}
         filled_tile_even = FilledTile([[CellState.BLOCKED if cell == CellState.BLOCKED else
-                                        (CellState.ON if (r+c) % 2 == 0 else CellState.NEWLY_OFF)
+                                        (CellState.ON_EVEN if (r+c) % 2 == 0 else CellState.ON_ODD)
                                         for c, cell in enumerate(row)]
                                        for r, row in enumerate(start_tile_cells)])
         filled_tile_odd = FilledTile([[CellState.BLOCKED if cell == CellState.BLOCKED else
-                                      (CellState.ON if (r + c) % 2 == 1 else CellState.NEWLY_OFF)
+                                      (CellState.ON_EVEN if (r + c) % 2 == 1 else CellState.ON_ODD)
                                       for c, cell in enumerate(row)]
                                      for r, row in enumerate(start_tile_cells)])
 
-        step_number = 0
-        while step_number < steps:
+        for step_number in range(steps):
             # For each tile, if cells at edges are on and no tile is adjacent, create the adjacent tile.
             new_tiles = set()
             for (tr, tc), tile in tiles.items():
@@ -282,20 +262,16 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
                 tiles[(tr, tc)] = Tile(tr, tc, copy.deepcopy(start_tile_cells))
 
             for tile in tiles.values():
-                tile.calculate_next_state(tiles, step_number)
-            for tile in tiles.values():
-                tile.advance(tiles)
-
-            step_number += 1
+                tile.advance(tiles, step_number)
 
             for tile_pos, tile in tiles.items():
                 replace_status = tile.can_replace_with_filled()
                 if replace_status == TileInterface.FilledReplacementStatus.YES_EVEN:
-                    tiles[tile_pos] = filled_tile_even if step_number % 2 == 0 else filled_tile_odd
+                    tiles[tile_pos] = filled_tile_even
                 elif replace_status == TileInterface.FilledReplacementStatus.YES_ODD:
-                    tiles[tile_pos] = filled_tile_odd if step_number % 2 == 0 else filled_tile_even
+                    tiles[tile_pos] = filled_tile_odd
 
-        return sum([tile.on_cell_count(step_number) for tile in tiles.values()])
+        return sum([tile.on_cell_count(steps) for tile in tiles.values()])
 
     if is_easy_solve():
         return easy_solve()
