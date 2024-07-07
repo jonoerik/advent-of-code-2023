@@ -52,6 +52,9 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
         ON_ODD = 2
         BLOCKED = 3
 
+    start_tile_cells = [[{".": CellState.OFF, "S": CellState.OFF, "#": CellState.BLOCKED}[cell] for cell in row]
+                        for row in input_data]
+
     class TileInterface(abc.ABC):
         def __init__(self, cells: list[list[CellState]]):
             self._cells = cells
@@ -214,36 +217,134 @@ def part2(input_data: InputType, steps: int = 26501365) -> ResultType:
             return TileInterface.FilledReplacementStatus.NO
 
     def is_easy_solve() -> bool:
-        """For this puzzle to be easily solvable for large step counts, the input must be a square of an odd width and
-        height, with 'S' centred directly in the middle, a perimeter of "." around the edges, and direct paths of "."
-        from S out to each edge. We also rely on puzzle_step_count % tile_width == tile_width / 2 - 0.5, as this
-        ensures the points of the diamond of resulting ON tiles will lie on the edges of their tiles, and all tiles will
-        be one of:
-        * Completely filled
-        * Half filled, approximately along a diagonal
-        * Three-quarter filled, with only two adjacent corners unfilled"""
+        """For this puzzle to be easily solvable for large step counts, check that a set of assumptions is met."""
+        # Ensure the tile is a square.
         if tile_height != tile_width:
             return False
-        if tile_height % 2 != 1 or tile_width % 2 != 1:
+        # Ensure the tile has an odd width and height.
+        if tile_height % 2 != 1:
             return False
+        # Ensure that we have an open border around the edge of the tile, and a cross of open cells centred on the
+        # middle of the tile, as this makes the spread of ON cells predictable on a tile-level (i.e. labyrinths of
+        # BLOCKED cells won't lead to an uneven spread).
         for row in [0, tile_height // 2, tile_height - 1]:
             if "#" in input_data[row]:
                 return False
         for col in [0, tile_width // 2, tile_width - 1]:
             if "#" in [row[col] for row in input_data]:
                 return False
+        # Ensure that the starting tile is in the middle of the puzzle.
         if input_data[tile_height // 2][tile_width // 2] != "S":
             return False
+        # Ensure that puzzle_step_count % tile_width == tile_width / 2 - 0.5, as this ensures the points of the diamond
+        # of resulting ON tiles will lie on the edges of their tiles, and all tiles will be one of:
+        # * Completely filled
+        # * 7/8 filled, with one corner unfilled
+        # * 1/8 filled, only a single corner
+        # * 3/4 filled, with only two adjacent corners unfilled
         if steps % tile_width != tile_width // 2 or tile_width % 2 != 1:
+            return False
+        # Ensure final area is large enough that assumptions about different tile ON-cell shapes hold.
+        if ((2 * steps) + 1) // tile_width < 3:
             return False
         return True
 
     def easy_solve() -> int:
-        pass  # TODO
+        total_on_cells = 0
+
+        # Width or height of covered area, in number of tiles.
+        t = ((2 * steps) + 1) // tile_width
+
+        z_pos = (t + 1) // 4
+        z_neg = (t - 1) // 4
+
+        # Count of completely full tiles with even corners.
+        full_count_even = (4 * (z_pos ** 2)) - (4 * z_pos) + 1
+        # Count of completely full tiles with odd corners.
+        full_count_odd = 4 * (z_neg ** 2)
+        # Check count of all full tiles.
+        assert full_count_even + full_count_odd == ((t ** 2) - (4 * t) + 5) // 2
+        # Count of tiles with only 2 adjacent corners unfilled, per corner of filled diamond.
+        # Total count will be quadruple this value.
+        # 🠷 🠵 🠶 🠴
+        two_corners_unfilled_count = 1
+        # Count of tiles with only a single corner unfilled, per side of filled diamond.
+        # Total count will be quadruple this value.
+        # 🭟 🭎 🭔 🭃
+        one_corner_unfilled_count = (t - 3) // 2
+        # Count of tiles with only a single corner filled, per side of filled diamond.
+        # Total count will be quadruple this value.
+        # 🭙 🬾 🭤 🭉
+        one_corner_filled_count = (t - 1) // 2
+
+        two_corners_unfilled_start_cell = (CellState.ON_EVEN if ((t - 1) % 4 == 0) else CellState.ON_ODD) \
+            if (tile_width - 1) % 4 == 0 else (CellState.ON_ODD if ((t - 1) % 4 == 0) else CellState.ON_EVEN)
+        one_corner_unfilled_start_cell = CellState.ON_EVEN if ((t - 1) % 4 == 0) else CellState.ON_ODD
+        one_corner_filled_start_cell = CellState.ON_EVEN if one_corner_unfilled_start_cell == CellState.ON_ODD \
+            else CellState.ON_ODD
+
+        # ---
+        # Fully filled tiles with ON_EVEN corners.
+        # ---
+        full_tile_even = Tile(0, 0, [[CellState.ON_EVEN if r == 0 and c == 0
+                                      else cell for c, cell in enumerate(row)]
+                                     for r, row in enumerate(start_tile_cells)])
+        # All full tiles get at least (tile_width // 2) extra steps to ensure all accessible internal areas are filled.
+        # We assume that the puzzle input doesn't contain any internal labyrinthine areas that would cause tiles to be
+        # filled differently depending on which cell the fill started from.
+        for step_number in range((tile_width * 2) - 2 + (tile_width // 2)):
+            full_tile_even.advance({}, step_number)
+        total_on_cells += full_count_even * full_tile_even.on_cell_count(steps)
+
+        # ---
+        # Fully filled tiles with ON_ODD corners.
+        # ---
+        full_tile_odd = Tile(0, 0, [[CellState.ON_ODD if r == 0 and c == 0
+                                     else cell for c, cell in enumerate(row)]
+                                    for r, row in enumerate(start_tile_cells)])
+        for step_number in range((tile_width * 2) - 2 + (tile_width // 2)):
+            full_tile_odd.advance({}, step_number + 1)
+        total_on_cells += full_count_odd * full_tile_odd.on_cell_count(steps)
+
+        for start_r, start_c in [(0, 0), (tile_height - 1, 0), (0, tile_width - 1), (tile_height - 1, tile_width - 1)]:
+            # ---
+            # 🭟 🭎 🭔 🭃
+            # ---
+            one_corner_unfilled_tile = Tile(0, 0, [[one_corner_unfilled_start_cell if r == start_r and c == start_c
+                                                    else cell for c, cell in enumerate(row)]
+                                                   for r, row in enumerate(start_tile_cells)])
+            for step_number in range(tile_width + (tile_width // 2) - 1):
+                one_corner_unfilled_tile.advance(
+                    {}, step_number if one_corner_unfilled_start_cell == CellState.ON_EVEN else step_number + 1)
+            total_on_cells += one_corner_unfilled_count * one_corner_unfilled_tile.on_cell_count(steps)
+
+            # ---
+            # 🭙 🬾 🭤 🭉
+            # ---
+            one_corner_filled_tile = Tile(0, 0, [[one_corner_filled_start_cell if r == start_r and c == start_c
+                                                  else cell for c, cell in enumerate(row)]
+                                                 for r, row in enumerate(start_tile_cells)])
+            for step_number in range((tile_width // 2) - 1):
+                one_corner_filled_tile.advance(
+                    {}, step_number if one_corner_filled_start_cell == CellState.ON_EVEN else step_number + 1)
+            total_on_cells += one_corner_filled_count * one_corner_filled_tile.on_cell_count(steps)
+
+        # ---
+        # 🠷 🠵 🠶 🠴
+        # ---
+        for start_r, start_c in [(0, tile_width // 2), (tile_height - 1, tile_width // 2),
+                                 (tile_height // 2, 0), (tile_height // 2, tile_width - 1)]:
+            two_corners_unfilled_tile = Tile(0, 0, [[two_corners_unfilled_start_cell if r == start_r and c == start_c
+                                                     else cell for c, cell in enumerate(row)]
+                                                    for r, row in enumerate(start_tile_cells)])
+            for step_number in range(tile_width - 1):
+                two_corners_unfilled_tile.advance(
+                    {}, step_number if two_corners_unfilled_start_cell == CellState.ON_EVEN else step_number + 1)
+            total_on_cells += two_corners_unfilled_count * two_corners_unfilled_tile.on_cell_count(steps)
+
+        return total_on_cells
 
     def naive_solve() -> int:
-        start_tile_cells = [[{".": CellState.OFF, "S": CellState.OFF, "#": CellState.BLOCKED}[cell] for cell in row]
-                            for row in input_data]
         tiles: dict[tuple[int, int], TileInterface] = \
             {(0, 0): Tile(0, 0, [[{".": CellState.OFF, "S": CellState.ON_EVEN, "#": CellState.BLOCKED}[cell]
                                   for cell in row]
