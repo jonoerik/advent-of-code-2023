@@ -64,13 +64,18 @@ class Block:
                      (self._end[0], self._end[1], self._end[2] + dz))
 
 
-def part1(input_data: InputType) -> ResultType:
-    # Simulate falling.
+def collapse(blocks: list[Block]) -> list[Block]:
+    """Simulate falling of blocks, and return the final rest state."""
     fallen = []
-    for b in sorted([Block(*input_block) for input_block in input_data], key=Block.min_z):
+    for b in sorted(blocks, key=Block.min_z):
         b_shadow = b.shadow()
         z = max([1] + [b2.max_z() + 1 for b2 in fallen if b2.collides(b_shadow)]) if b_shadow else 1
         fallen.append(b.lowered(z))
+    return fallen
+
+
+def part1(input_data: InputType) -> ResultType:
+    fallen = collapse([Block(*input_block) for input_block in input_data])
 
     # For each block, establish which blocks support it.
     z_maxs: dict[int, list[Block]] = collections.defaultdict(list)
@@ -82,4 +87,28 @@ def part1(input_data: InputType) -> ResultType:
 
 
 def part2(input_data: InputType) -> ResultType:
-    pass
+    fallen = collapse([Block(*input_block) for input_block in input_data])
+
+    # For each block, establish which blocks it's supporting.
+    z_mins: dict[int, list[Block]] = collections.defaultdict(list)
+    for b in fallen:
+        z_mins[b.min_z()].append(b)
+    supports = {b: [b2 for b2 in z_mins[b.max_z() + 1] if b.supports(b2)] for b in fallen}
+
+    ground_blocks = [b for b in fallen if b.min_z() <= 1]
+
+    def blocks_supported(removed_block: Block) -> int:
+        """Return the number of blocks still supported by the ground, if removed_block were to be removed."""
+        to_process = set(ground_blocks)
+        to_process.discard(removed_block)
+        reachable = set()
+        while to_process:
+            current = to_process.pop()
+            reachable.add(current)
+            for next_block in supports[current]:
+                if next_block not in reachable and next_block is not removed_block:
+                    to_process.add(next_block)
+        return len(reachable)
+
+    total_blocks = len(fallen)
+    return sum([total_blocks - blocks_supported(b) - 1 for b in fallen])
