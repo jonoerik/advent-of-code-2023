@@ -193,4 +193,23 @@ def part1(input_data: InputType) -> ResultType:
 
 
 def part2(input_data: InputType) -> ResultType:
-    pass  # TODO
+    entry, egress = find_entry_egress(input_data)
+    graph = build_graph(input_data)
+    # Create the undirected version of graph.
+    dry_graph: dict[tuple[int, int], list[tuple[tuple[int, int], int]]] = collections.defaultdict(list)
+    for from_node, edges in graph.items():
+        for to_node, edge_cost in edges:
+            dry_graph[from_node].append((to_node, edge_cost))
+            dry_graph[to_node].append((from_node, edge_cost))
+    dry_graph = dict(dry_graph)
+
+    # The longest path problem for an undirected graph is NP-hard, so just take the naive recursive approach.
+    # At each junction, we recurse into at most 3 branches (only 2 if the input only contains v and > slopes, which
+    # seems to be the case).
+    def longest_path(n: tuple[int, int], visited: set[tuple[int, int]]) -> int:
+        if n == egress:
+            return 0
+        return max([0] + [cost + longest_path(next_node, visited | {n}) for next_node, cost in dry_graph[n]
+                          if next_node not in visited])
+
+    return longest_path(entry, set())
