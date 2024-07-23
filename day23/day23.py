@@ -29,12 +29,24 @@ def load(input_path: Path) -> InputType:
                   }[c] for c in line.strip()] for line in f.readlines()]
 
 
-def part1(input_data: InputType) -> ResultType:
-    # Check that the map has only one entry and one exit (egress, to avoid clashing with Python keyword).
+def find_entry_egress(input_data: InputType) -> tuple[tuple[int, int], tuple[int, int]]:
+    """Find the entry and exit (called egress, to avoid clashing with the Python keyword) points of the map."""
+    # Check that the map has only one entry and one egress.
     assert all([r[0] == Tile.FOREST for r in input_data])
     assert all([r[-1] == Tile.FOREST for r in input_data])
     assert all([t in [Tile.PATH, Tile.FOREST] for t in input_data[0]]) and input_data[0].count(Tile.PATH) == 1
     assert all([t in [Tile.PATH, Tile.FOREST] for t in input_data[-1]]) and input_data[-1].count(Tile.PATH) == 1
+
+    entry = (0, input_data[0].index(Tile.PATH))
+    egress = (len(input_data) - 1, input_data[-1].index(Tile.PATH))
+
+    return entry, egress
+
+
+def build_graph(input_data: InputType) -> dict[tuple[int, int], list[tuple[tuple[int, int], int]]]:
+    """Build the directed acyclic graph representing the map.
+    Returns a dictionary of graph edges, as {start_coordinates: [(end_coordinates, path_length)]}.
+    Path length includes end point, but not start point."""
 
     entry = (0, input_data[0].index(Tile.PATH))
     egress = (len(input_data) - 1, input_data[-1].index(Tile.PATH))
@@ -84,65 +96,65 @@ def part1(input_data: InputType) -> ResultType:
 
         return current_pos, path_length
 
-    def build_graph() -> dict[tuple[int, int], list[tuple[tuple[int, int], int]]]:
-        """Build the directed acyclic graph representing the map.
-        Returns a dictionary of graph edges, as {start_coordinates: [(end_coordinates, path_length)]}.
-        Path length includes end point, but not start point."""
-        first_node, start_length = trace_path(entry)
-        result = collections.defaultdict(list, {entry: [(downhill_pos(first_node), start_length)]})
-        to_process = {downhill_pos(first_node)}
-        processed = set()
+    first_node, start_length = trace_path(entry)
+    result = collections.defaultdict(list, {entry: [(downhill_pos(first_node), start_length)]})
+    to_process = {downhill_pos(first_node)}
+    processed = set()
 
-        while to_process:
-            node = to_process.pop()
-            if node in processed:
-                continue
+    while to_process:
+        node = to_process.pop()
+        if node in processed:
+            continue
 
-            for segment_start in [(node[0] - 1, node[1]), (node[0] + 1, node[1]),
-                                  (node[0], node[1] - 1), (node[0], node[1] + 1)]:
-                if input_data[segment_start[0]][segment_start[1]] != Tile.FOREST and \
-                        downhill_pos(segment_start) != node:  # Only process outgoing paths.
-                    # Detect adjacent nodes (only a single slope between them).
-                    pos_after_start = downhill_pos(segment_start)
-                    if pos_after_start != egress and \
-                            Tile.PATH not in [input_data[pos_after_start[0] + dr][pos_after_start[1] + dc]
-                                              for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]]:
-                        result[node].append((pos_after_start, 2))
-                        to_process.add(pos_after_start)
+        for segment_start in [(node[0] - 1, node[1]), (node[0] + 1, node[1]),
+                              (node[0], node[1] - 1), (node[0], node[1] + 1)]:
+            if input_data[segment_start[0]][segment_start[1]] != Tile.FOREST and \
+                    downhill_pos(segment_start) != node:  # Only process outgoing paths.
+                # Detect adjacent nodes (only a single slope between them).
+                pos_after_start = downhill_pos(segment_start)
+                if pos_after_start != egress and \
+                        Tile.PATH not in [input_data[pos_after_start[0] + dr][pos_after_start[1] + dc]
+                                          for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]]:
+                    result[node].append((pos_after_start, 2))
+                    to_process.add(pos_after_start)
+
+                else:
+                    segment_end, segment_length = trace_path(segment_start)
+
+                    if segment_end == egress:
+                        result[node].append((segment_end, segment_length))
 
                     else:
-                        segment_end, segment_length = trace_path(segment_start)
+                        end_node = downhill_pos(segment_end)
 
-                        if segment_end == egress:
-                            result[node].append((segment_end, segment_length))
+                        # Assume the input has no loops.
+                        assert end_node != node
 
-                        else:
-                            end_node = downhill_pos(segment_end)
+                        result[node].append((downhill_pos(segment_end), segment_length + 1))
+                        to_process.add(end_node)
 
-                            # Assume the input has no loops.
-                            assert end_node != node
+        processed.add(node)
 
-                            result[node].append((downhill_pos(segment_end), segment_length + 1))
-                            to_process.add(end_node)
+    # Check that the graph is acyclic, using a depth-first search.
+    # If the graph contains cycles, the problem of finding the longest simple (no repeated nodes)
+    # path is NP-hard. For a DAG, the longest path can be found in linear time.
+    def check_cycles(n: tuple[int, int], visited: list[tuple[int, int]]):
+        for (next_node, _) in result[n]:
+            assert next_node not in visited
+            check_cycles(next_node, visited + [n])
 
-            processed.add(node)
+    check_cycles(entry, [])
 
-        # Check that the graph is acyclic, using a depth-first search.
-        # If the graph contains cycles, the problem of finding the longest simple (no repeated nodes)
-        # path is NP-hard. For a DAG, the longest path can be found in linear time.
-        def check_cycles(n: tuple[int, int], visited: list[tuple[int, int]]):
-            for (next_node, _) in result[n]:
-                assert next_node not in visited
-                check_cycles(next_node, visited + [n])
+    # Ensure end node was reached.
+    assert egress in result.keys()
 
-        check_cycles(entry, [])
+    return dict(result)
 
-        # Ensure end node was reached.
-        assert egress in result.keys()
 
-        return dict(result)
+def part1(input_data: InputType) -> ResultType:
+    entry, egress = find_entry_egress(input_data)
+    graph = build_graph(input_data)
 
-    graph = build_graph()
     # Negate all edge weights in graph.
     graph = {start: [(end, -cost) for end, cost in v] for start, v in graph.items()}
 
