@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import itertools
+import multiprocessing
 from pathlib import Path
 import re
 import sympy
@@ -24,34 +25,41 @@ def load(input_path: Path) -> InputType:
                 for match in [line_regex.fullmatch(line.strip()) for line in f.readlines()]]
 
 
+def intersection_2d(h1: Hailstone, h2: Hailstone) -> tuple[sympy.core.Number, sympy.core.Number] | None:
+    # Find intersection by solving set of linear equations:
+    # h1.x + h1.vx * t1 = h2.x + h2.vx * t2
+    # h1.y + h1.vy * t1 = h2.y + h2.vy * t2
+    # ===
+    # h1.vx * t1 - h2.vx * t2 = h2.x - h1.x
+    # h1.vy * t1 - h2.vy * t2 = h2.y - h1.y
+    # Solve m*t = p
+    m = sympy.Matrix([[h1.vel[0], -h2.vel[0]], [h1.vel[1], -h2.vel[1]]])
+    p = sympy.Matrix(2, 1, [h2.pos[0] - h1.pos[0], h2.pos[1] - h1.pos[1]])
+    if m.det() == 0:
+        # Hailstone paths don't intersect.
+        return None
+    t = m.inv() * p
+    if t[0] < 0 or t[1] < 0:
+        # Intersection occurred in the past.
+        return None
+    return h1.pos[0] + h1.vel[0] * t[0, 0], h1.pos[1] + h1.vel[1] * t[0, 0]
+
+
+def check_intersection(h1: Hailstone, h2: Hailstone, test_area_min: int, test_area_max: int):
+    intersection = intersection_2d(h1, h2)
+    return intersection is not None and \
+        test_area_min <= intersection[0] <= test_area_max and \
+        test_area_min <= intersection[1] <= test_area_max
+
+
 def part1(input_data: InputType,
           test_area_min: int = 200_000_000_000_000,
           test_area_max: int = 400_000_000_000_000) -> ResultType:
 
-    def intersection_2d(h1: Hailstone, h2: Hailstone) -> tuple[sympy.core.Number, sympy.core.Number] | None:
-        # Find intersection by solving set of linear equations:
-        # h1.x + h1.vx * t1 = h2.x + h2.vx * t2
-        # h1.y + h1.vy * t1 = h2.y + h2.vy * t2
-        # ===
-        # h1.vx * t1 - h2.vx * t2 = h2.x - h1.x
-        # h1.vy * t1 - h2.vy * t2 = h2.y - h1.y
-        # Solve m*t = p
-        m = sympy.Matrix([[h1.vel[0], -h2.vel[0]], [h1.vel[1], -h2.vel[1]]])
-        p = sympy.Matrix(2, 1, [h2.pos[0] - h1.pos[0], h2.pos[1] - h1.pos[1]])
-        if m.det() == 0:
-            # Hailstone paths don't intersect.
-            return None
-        t = m.inv() * p
-        if t[0] < 0 or t[1] < 0:
-            # Intersection occurred in the past.
-            return None
-        return h1.pos[0] + h1.vel[0] * t[0, 0], h1.pos[1] + h1.vel[1] * t[0, 0]
-
-    return len([None for x, y in
-                [t for t in
-                 [intersection_2d(a, b) for a, b in itertools.combinations(input_data, 2)]
-                 if t is not None]
-                if test_area_min <= x <= test_area_max and test_area_min <= y <= test_area_max])
+    with multiprocessing.Pool() as pool:
+        return pool.starmap(check_intersection,
+                            [(h1, h2, test_area_min, test_area_max) for h1, h2 in itertools.combinations(input_data, 2)]
+                            ).count(True)
 
 
 def part2(input_data: InputType) -> ResultType:
