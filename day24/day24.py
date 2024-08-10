@@ -63,6 +63,94 @@ def part1(input_data: InputType,
                             ).count(True)
 
 
+def check_solvable(m_in: list[list[int]]) -> bool:
+    """Perform Gaussian Elimination on the linear system of equations given by augmented matrix m_in.
+    The system is only processed to row echelon form, not reduced row echelon form, and this function may return early
+    if the system has no solutions.
+    Return True if the system has solutions, False otherwise.
+    The reduction is done using floating point calculations, so it's susceptible to floating point errors.
+    Numbers are treated as equal to 0 if they are within +/- zero_error of 0.
+    If this returns true, this only indicates that the linear system m_in may have a solution.
+    A more precise solve should be done to confirm this."""
+    m = [[float(cell) for cell in row] for row in m_in]
+    zero_error = 1e-6
+
+    def is_zero(n: float):
+        return -zero_error <= n <= zero_error
+
+    def swap_rows(r1: int, r2: int) -> None:
+        a = m[r1]
+        b = m[r2]
+        m[r2] = a
+        m[r1] = b
+
+    def scale_add_row(r_dest: int, r_src: int, s: float) -> None:
+        assert not is_zero(s)
+        assert r_dest != r_src
+        m[r_dest] = [a + s * b for a, b in zip(m[r_dest], m[r_src])]
+
+    current_col = 0
+    # Dictionary from column index, to row index that contains the leading nonzero value for that column.
+    leading_rows: dict[int, int] = {}
+    current_row = 0
+    while current_row < len(m):
+        # Don't try to reduce away the last column of the augmented matrix.
+        if current_col < len(m[0]) - 1:
+            if is_zero(m[current_row][current_col]):
+                for search_row in range(current_row + 1, len(m)):
+                    if not is_zero(m[search_row][current_col]):
+                        swap_rows(current_row, search_row)
+                        break
+                else:
+                    # No remaining rows have a nonzero value in current_col; so skip that column.
+                    current_col += 1
+                    continue
+
+            for c in leading_rows.keys():
+                if not is_zero(m[current_row][c]):
+                    scale_add_row(current_row, leading_rows[c], -m[current_row][c] / m[leading_rows[c]][c])
+
+            leading_rows[current_col] = current_row
+            for lower_row in range(current_row + 1, len(m)):
+                if not is_zero(m[lower_row][current_col]):
+                    scale_add_row(lower_row, current_row, -m[lower_row][current_col] / m[current_row][current_col])
+            current_col += 1
+        else:
+            if not is_zero(m[current_row][-1]):
+                # Shouldn't be able to get this far with non-zero values in any non-last column in this row.
+                assert all(is_zero(c) for c in m[current_row][0:-1])
+                # This row states that 0 == nonzero value, therefore the system has no solution.
+                return False
+
+        current_row += 1
+
+    return True
+
+
+def try_solve(inputs: tuple[InputType, tuple[int, int, int]]) -> tuple[int, int, int] | None:
+    """Try to solve for velocity = v. If successful, return start position of the rock, otherwise return None."""
+    input_data, v = inputs
+    linear_system = []
+    for i, h in enumerate(input_data):
+        linear_system.append([1, 0, 0] + ([0] * i) +
+                             [v[0] - h.vel[0]] + ([0] * (len(input_data) - i - 1)) + [h.pos[0]])
+        linear_system.append([0, 1, 0] + ([0] * i) +
+                             [v[1] - h.vel[1]] + ([0] * (len(input_data) - i - 1)) + [h.pos[1]])
+        linear_system.append([0, 0, 1] + ([0] * i) +
+                             [v[2] - h.vel[2]] + ([0] * (len(input_data) - i - 1)) + [h.pos[2]])
+
+    if not check_solvable(linear_system):
+        return None
+
+    unknowns = [sympy.Symbol(f"rock_{d}") for d in ["x", "y", "z"]] + \
+               [sympy.Symbol(f"t_{ti}") for ti in range(len(input_data))]
+    solution = sympy.solve_linear_system(sympy.Matrix(linear_system), *unknowns)
+    if solution:
+        return solution[unknowns[0]], solution[unknowns[1]], solution[unknowns[2]]
+    else:
+        return None
+
+
 def part2(input_data: InputType) -> ResultType:
     # Thanks to u/xiaowuc1 in reddit.com/r/adventofcode for the suggestion of brute forcing velocity vectors.
     # https://www.reddit.com/r/adventofcode/comments/18pptor/comment/keps780
@@ -74,34 +162,17 @@ def part2(input_data: InputType) -> ResultType:
             for z in [-n, n]:
                 for y in range(-n, n+1):
                     for x in range(-n, n+1):
-                        yield x, y, z
+                        yield input_data, (x, y, z)
             for y in [-n, n]:
                 for z in range(-n+1, n):
                     for x in range(-n, n+1):
-                        yield x, y, z
+                        yield input_data, (x, y, z)
             for x in [-n, n]:
                 for z in range(-n+1, n):
                     for y in range(-n+1, n):
-                        yield x, y, z
+                        yield input_data, (x, y, z)
 
-    unknowns = [sympy.Symbol(f"rock_{d}") for d in ["x", "y", "z"]] + \
-               [sympy.Symbol(f"t_{ti}") for ti in range(len(input_data))]
-
-    def try_solve(v: tuple[int, int, int]) -> tuple[int, int, int] | None:
-        """Try to solve for velocity = v. If successful, return start position of the rock, otherwise return None."""
-        linear_system = []
-        for i, h in enumerate(input_data):
-            linear_system.append([1, 0, 0] + ([0] * i) +
-                                 [v[0] - h.vel[0]] + ([0] * (len(input_data) - i - 1)) + [h.pos[0]])
-            linear_system.append([0, 1, 0] + ([0] * i) +
-                                 [v[1] - h.vel[1]] + ([0] * (len(input_data) - i - 1)) + [h.pos[1]])
-            linear_system.append([0, 0, 1] + ([0] * i) +
-                                 [v[2] - h.vel[2]] + ([0] * (len(input_data) - i - 1)) + [h.pos[2]])
-
-        solution = sympy.solve_linear_system(sympy.Matrix(linear_system), *unknowns)
-        if solution:
-            return solution[unknowns[0]], solution[unknowns[1]], solution[unknowns[2]]
-
-    for velocity in next_trial_v():
-        if position := try_solve(velocity):
-            return sum(position)
+    with multiprocessing.Pool() as pool:
+        for position in pool.imap(try_solve, next_trial_v()):
+            if position is not None:
+                return sum(position)
