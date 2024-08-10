@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import collections.abc
 import itertools
 import multiprocessing
 from pathlib import Path
@@ -63,4 +64,44 @@ def part1(input_data: InputType,
 
 
 def part2(input_data: InputType) -> ResultType:
-    pass  # TODO
+    # Thanks to u/xiaowuc1 in reddit.com/r/adventofcode for the suggestion of brute forcing velocity vectors.
+    # https://www.reddit.com/r/adventofcode/comments/18pptor/comment/keps780
+
+    def next_trial_v() -> collections.abc.Iterator[tuple[int, int, int]]:
+        """Yield all tuple[int, int, int], except (0, 0, 0), starting with those closest to (0, 0, 0) and then expanding
+        out layer by layer."""
+        for n in itertools.count(1):
+            for z in [-n, n]:
+                for y in range(-n, n+1):
+                    for x in range(-n, n+1):
+                        yield x, y, z
+            for y in [-n, n]:
+                for z in range(-n+1, n):
+                    for x in range(-n, n+1):
+                        yield x, y, z
+            for x in [-n, n]:
+                for z in range(-n+1, n):
+                    for y in range(-n+1, n):
+                        yield x, y, z
+
+    unknowns = [sympy.Symbol(f"rock_{d}") for d in ["x", "y", "z"]] + \
+               [sympy.Symbol(f"t_{ti}") for ti in range(len(input_data))]
+
+    def try_solve(v: tuple[int, int, int]) -> tuple[int, int, int] | None:
+        """Try to solve for velocity = v. If successful, return start position of the rock, otherwise return None."""
+        linear_system = []
+        for i, h in enumerate(input_data):
+            linear_system.append([1, 0, 0] + ([0] * i) +
+                                 [v[0] - h.vel[0]] + ([0] * (len(input_data) - i - 1)) + [h.pos[0]])
+            linear_system.append([0, 1, 0] + ([0] * i) +
+                                 [v[1] - h.vel[1]] + ([0] * (len(input_data) - i - 1)) + [h.pos[1]])
+            linear_system.append([0, 0, 1] + ([0] * i) +
+                                 [v[2] - h.vel[2]] + ([0] * (len(input_data) - i - 1)) + [h.pos[2]])
+
+        solution = sympy.solve_linear_system(sympy.Matrix(linear_system), *unknowns)
+        if solution:
+            return solution[unknowns[0]], solution[unknowns[1]], solution[unknowns[2]]
+
+    for velocity in next_trial_v():
+        if position := try_solve(velocity):
+            return sum(position)
