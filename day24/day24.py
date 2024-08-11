@@ -127,28 +127,41 @@ def check_solvable(m_in: list[list[int]]) -> bool:
     return True
 
 
-def try_solve(inputs: tuple[InputType, tuple[int, int, int]]) -> tuple[int, int, int] | None:
+# Global value used to pass input_data in a multiprocessing-safe way to each subprocess.
+input_data_global: InputType
+
+
+def try_solve(v: tuple[int, int, int]) -> tuple[int, int, int] | None:
     """Try to solve for velocity = v. If successful, return start position of the rock, otherwise return None."""
-    input_data, v = inputs
     linear_system = []
-    for i, h in enumerate(input_data):
-        linear_system.append([1, 0, 0] + ([0] * i) +
-                             [v[0] - h.vel[0]] + ([0] * (len(input_data) - i - 1)) + [h.pos[0]])
-        linear_system.append([0, 1, 0] + ([0] * i) +
-                             [v[1] - h.vel[1]] + ([0] * (len(input_data) - i - 1)) + [h.pos[1]])
-        linear_system.append([0, 0, 1] + ([0] * i) +
-                             [v[2] - h.vel[2]] + ([0] * (len(input_data) - i - 1)) + [h.pos[2]])
+
+    def add_linear_equations(n):
+        h = input_data_global[n]
+        linear_system.append([1, 0, 0] + ([0] * n) +
+                             [v[0] - h.vel[0]] + ([0] * (len(input_data_global) - n - 1)) + [h.pos[0]])
+        linear_system.append([0, 1, 0] + ([0] * n) +
+                             [v[1] - h.vel[1]] + ([0] * (len(input_data_global) - n - 1)) + [h.pos[1]])
+        linear_system.append([0, 0, 1] + ([0] * n) +
+                             [v[2] - h.vel[2]] + ([0] * (len(input_data_global) - n - 1)) + [h.pos[2]])
+
+    # Do an initial check with only 2 lines, so that we can quickly eliminate most candidate velocities.
+    add_linear_equations(0)
+    add_linear_equations(1)
 
     if not check_solvable(linear_system):
         return None
 
+    # Add the remaining line equations, for the final accurate check.
+    for i in range(2, len(input_data_global)):
+        add_linear_equations(i)
+
     unknowns = [sympy.Symbol(f"rock_{d}") for d in ["x", "y", "z"]] + \
-               [sympy.Symbol(f"t_{ti}") for ti in range(len(input_data))]
+               [sympy.Symbol(f"t_{ti}") for ti in range(len(input_data_global))]
     solution = sympy.solve_linear_system(sympy.Matrix(linear_system), *unknowns)
-    if solution:
-        return solution[unknowns[0]], solution[unknowns[1]], solution[unknowns[2]]
-    else:
+    if not solution:
         return None
+
+    return solution[unknowns[0]], solution[unknowns[1]], solution[unknowns[2]]
 
 
 def part2(input_data: InputType) -> ResultType:
@@ -162,17 +175,23 @@ def part2(input_data: InputType) -> ResultType:
             for z in [-n, n]:
                 for y in range(-n, n+1):
                     for x in range(-n, n+1):
-                        yield input_data, (x, y, z)
+                        yield x, y, z
             for y in [-n, n]:
                 for z in range(-n+1, n):
                     for x in range(-n, n+1):
-                        yield input_data, (x, y, z)
+                        yield x, y, z
             for x in [-n, n]:
                 for z in range(-n+1, n):
                     for y in range(-n+1, n):
-                        yield input_data, (x, y, z)
+                        yield x, y, z
 
-    with multiprocessing.Pool() as pool:
-        for position in pool.imap(try_solve, next_trial_v()):
+    def init_fn(input_data_param) -> None:
+        global input_data_global
+        input_data_global = input_data_param
+
+    with multiprocessing.Pool(initializer=init_fn, initargs=(input_data,)) as pool:
+        # At the default chunksize, subprocesses weren't fully utilising CPU cores.
+        # If needed, chunksize can be increased further to achieve 100% CPU utilisation.
+        for position in pool.imap(try_solve, next_trial_v(), chunksize=1000):
             if position is not None:
                 return sum(position)
